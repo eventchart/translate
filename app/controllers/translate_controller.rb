@@ -1,15 +1,16 @@
-class TranslateController < ActionController::Base
+class TranslateController < ApplicationController
   # It seems users with active_record_store may get a "no :secret given" error if we don't disable csrf protection,
   skip_before_filter :verify_authenticity_token
 
-  layout 'translate'
-
+  authorize_resource :class => false
+  layout 'application'
   before_filter :init_translations
   before_filter :set_locale
 
   # GET /translate
   def index
     initialize_keys
+    filter_by_file_pattern
     filter_by_key_pattern
     filter_by_text_pattern
     filter_by_translated_text_pattern
@@ -73,7 +74,30 @@ class TranslateController < ActionController::Base
     raise StandardError, "to_locales expected to be an array" if to_loc.class != Array
     to_loc
   end
-  helper_method :to_locales 
+  helper_method :to_locales
+
+  def filter_by_file_pattern
+    return if params[:file_pattern].blank?
+    @keys.select! do |key|
+      case params[:file_type]
+      when "equals"
+        if @files[key].present? && @files[key].include?(params[:file_pattern])
+          p @files[key].include?(params[:file_pattern])
+        end
+      when "contains"
+        match = false
+        @files[key].present? && @files[key].each do |item|
+          if item.include?(params[:file_pattern])
+            match = true
+            break
+          end
+        end
+        match
+      else
+        raise "Unknown key_type '#{params[:file_type]}'"
+      end
+    end
+  end
 
   def filter_by_translated_or_changed
     params[:filter] ||= 'all'
@@ -85,10 +109,10 @@ class TranslateController < ActionController::Base
       when 'translated'
         lookup(@to_locale, key).blank?
       when 'changed'
-        lookup(@from_locale, key).to_s == lookup(@to_locale, key).to_s 
+        lookup(@from_locale, key).to_s == lookup(@to_locale, key).to_s
       when 'list_changed'
-        fr = lookup(@from_locale, key).to_s.squish  
-        to = lookup(@to_locale, key).to_s.squish 
+        fr = lookup(@from_locale, key).to_s.squish
+        to = lookup(@to_locale, key).to_s.squish
         if fr.downcase != to.downcase
           p '--'
           p 'c:' + fr
